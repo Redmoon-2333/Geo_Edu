@@ -10,4 +10,50 @@
         </foreach>
     </select>
 
+    <select id="selectByConditions" resultType="com.geoedu.model.entity.Knowledge">
+        SELECT * FROM knowledge
+        <where>
+            <if test="grade != null and grade != ''">
+                AND grade = #{grade}
+            </if>
+            <if test="chapter != null and chapter != ''">
+                AND chapter = #{chapter}
+            </if>
+            <if test="difficulty != null and difficulty != ''">
+                AND difficulty = #{difficulty}
+            </if>
+        </where>
+        ORDER BY created_at DESC
+        LIMIT #{size} OFFSET #{offset}
+    </select>
+
+    <select id="countByConditions" resultType="long">
+        SELECT COUNT(*) FROM knowledge
+        <where>
+            <if test="grade != null and grade != ''">
+                AND grade = #{grade}
+            </if>
+            <if test="chapter != null and chapter != ''">
+                AND chapter = #{chapter}
+            </if>
+            <if test="difficulty != null and difficulty != ''">
+                AND difficulty = #{difficulty}
+            </if>
+        </where>
+    </select>
+
+    <select id="searchByKeywordPaged" resultType="com.geoedu.model.entity.Knowledge">
+        SELECT * FROM knowledge
+        WHERE LOWER(title) LIKE LOWER(CONCAT('%', #{keyword}, '%'))
+           OR LOWER(content) LIKE LOWER(CONCAT('%', #{keyword}, '%'))
+        ORDER BY created_at DESC
+        LIMIT #{size} OFFSET #{offset}
+    </select>
+
+    <select id="countByKeyword" resultType="long">
+        SELECT COUNT(*) FROM knowledge
+        WHERE LOWER(title) LIKE LOWER(CONCAT('%', #{keyword}, '%'))
+           OR LOWER(content) LIKE LOWER(CONCAT('%', #{keyword}, '%'))
+    </select>
+
 </mapper>

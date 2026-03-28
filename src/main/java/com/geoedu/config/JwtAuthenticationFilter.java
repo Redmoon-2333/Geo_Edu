@@ -1,12 +1,16 @@
 package com.geoedu.config;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.geoedu.model.dto.ApiResponse;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.stereotype.Component;
@@ -14,7 +18,9 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.Collections;
+import java.util.List;
 
 @Slf4j
 @Component
@@ -25,6 +31,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private static final String BEARER_PREFIX = "Bearer ";
 
     private final JwtTokenProvider jwtTokenProvider;
+    private final ObjectMapper objectMapper;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
@@ -33,23 +40,33 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         try {
             String jwt = extractJwtFromRequest(request);
 
-            if (StringUtils.hasText(jwt) && jwtTokenProvider.validate(jwt)) {
-                String username = jwtTokenProvider.getUsernameFrom(jwt);
-                String userId = jwtTokenProvider.getUserIdFrom(jwt);
+            if (StringUtils.hasText(jwt)) {
+                if (jwtTokenProvider.validate(jwt)) {
+                    String username = jwtTokenProvider.getUsernameFromToken(jwt);
+                    String userId = jwtTokenProvider.getUserIdFrom(jwt);
+                    String role = jwtTokenProvider.getRoleFrom(jwt);
 
-                UsernamePasswordAuthenticationToken authentication =
-                        new UsernamePasswordAuthenticationToken(
-                                username,
-                                userId,
-                                Collections.emptyList()
-                        );
-                authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                    List<SimpleGrantedAuthority> authorities = Collections.singletonList(
+                            new SimpleGrantedAuthority("ROLE_" + role.toUpperCase())
+                    );
 
-                SecurityContextHolder.getContext().setAuthentication(authentication);
-                log.debug("Set authentication for user: {}", username);
+                    UsernamePasswordAuthenticationToken authentication =
+                            new UsernamePasswordAuthenticationToken(
+                                    username,
+                                    userId,
+                                    authorities
+                            );
+                    authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+
+                    SecurityContextHolder.getContext().setAuthentication(authentication);
+                    log.debug("Set authentication for user: {} with role: {}", username, role);
+                }
             }
         } catch (Exception e) {
-            log.error("Cannot set user authentication: {}", e.getMessage());
+            log.error("JWT authentication failed: {}", e.getMessage());
+            SecurityContextHolder.clearContext();
+            writeErrorResponse(response, HttpServletResponse.SC_UNAUTHORIZED, "Invalid or expired token");
+            return;
         }
 
         filterChain.doFilter(request, response);
@@ -61,5 +78,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             return bearerToken.substring(BEARER_PREFIX.length());
         }
         return null;
+    }
+
+    private void writeErrorResponse(HttpServletResponse response, int status, String message) throws IOException {
+        response.setStatus(status);
+        response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+        response.setCharacterEncoding(StandardCharsets.UTF_8.name());
+        
+        ApiResponse<Void> apiResponse = ApiResponse.error(status, message);
+        response.getWriter().write(objectMapper.writeValueAsString(apiResponse));
     }
 }

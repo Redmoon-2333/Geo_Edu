@@ -1,5 +1,9 @@
 package com.geoedu;
 
+import com.geoedu.config.JwtTokenProvider;
+import com.geoedu.exception.AuthenticationException;
+import com.geoedu.exception.BusinessException;
+import com.geoedu.exception.EntityNotFoundException;
 import com.geoedu.mapper.UserMapper;
 import com.geoedu.model.dto.LoginRequest;
 import com.geoedu.model.dto.LoginResponse;
@@ -13,8 +17,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.util.Optional;
 
@@ -28,23 +31,23 @@ class AuthServiceTest {
     @Mock
     private UserMapper userMapper;
 
+    @Mock
+    private PasswordEncoder passwordEncoder;
+
+    @Mock
+    private JwtTokenProvider jwtTokenProvider;
+
     @InjectMocks
     private AuthService authService;
 
-    private BCryptPasswordEncoder passwordEncoder;
     private User sampleUser;
 
     @BeforeEach
     void setUp() {
-        passwordEncoder = new BCryptPasswordEncoder();
-        ReflectionTestUtils.setField(authService, "passwordEncoder", passwordEncoder);
-        ReflectionTestUtils.setField(authService, "jwtSecret", "test-secret-key-that-is-at-least-256-bits-long-for-hs256");
-        ReflectionTestUtils.setField(authService, "jwtExpiration", 86400000L);
-
         sampleUser = User.builder()
                 .id("1")
                 .username("testuser")
-                .passwordHash(passwordEncoder.encode("correctPassword"))
+                .passwordHash("hashedPassword")
                 .role("student")
                 .build();
     }
@@ -57,11 +60,14 @@ class AuthServiceTest {
                 .build();
 
         when(userMapper.findByUsername("testuser")).thenReturn(Optional.of(sampleUser));
+        when(passwordEncoder.matches("correctPassword", "hashedPassword")).thenReturn(true);
+        when(jwtTokenProvider.generateToken("1", "testuser", "student")).thenReturn("test-token");
+        when(jwtTokenProvider.getExpiration()).thenReturn(86400000L);
 
         LoginResponse response = authService.login(request);
 
         assertNotNull(response);
-        assertNotNull(response.getToken());
+        assertEquals("test-token", response.getToken());
         assertTrue(response.getExpiresIn() > 0);
         assertEquals("testuser", response.getUser().getUsername());
         assertEquals("student", response.getUser().getRole());
@@ -76,8 +82,9 @@ class AuthServiceTest {
                 .build();
 
         when(userMapper.findByUsername("testuser")).thenReturn(Optional.of(sampleUser));
+        when(passwordEncoder.matches("wrongPassword", "hashedPassword")).thenReturn(false);
 
-        RuntimeException exception = assertThrows(RuntimeException.class, () -> authService.login(request));
+        AuthenticationException exception = assertThrows(AuthenticationException.class, () -> authService.login(request));
         assertEquals("用户名或密码错误", exception.getMessage());
         verify(userMapper, times(1)).findByUsername("testuser");
     }
@@ -91,7 +98,7 @@ class AuthServiceTest {
 
         when(userMapper.findByUsername("nonexistent")).thenReturn(Optional.empty());
 
-        RuntimeException exception = assertThrows(RuntimeException.class, () -> authService.login(request));
+        AuthenticationException exception = assertThrows(AuthenticationException.class, () -> authService.login(request));
         assertEquals("用户名或密码错误", exception.getMessage());
     }
 
@@ -103,10 +110,11 @@ class AuthServiceTest {
                 .build();
 
         when(userMapper.existsByUsername("newuser")).thenReturn(false);
+        when(passwordEncoder.encode("newpassword")).thenReturn("hashedPassword");
         doAnswer(invocation -> {
             User user = invocation.getArgument(0);
             user.setId("2");
-            return user;
+            return 1;
         }).when(userMapper).insert(any(User.class));
 
         UserDTO result = authService.register(request);
@@ -127,14 +135,14 @@ class AuthServiceTest {
 
         when(userMapper.existsByUsername("existinguser")).thenReturn(true);
 
-        RuntimeException exception = assertThrows(RuntimeException.class, () -> authService.register(request));
+        BusinessException exception = assertThrows(BusinessException.class, () -> authService.register(request));
         assertEquals("用户名已存在", exception.getMessage());
         verify(userMapper, never()).insert(any(User.class));
     }
 
     @Test
     void getUserById_Success() {
-        when(userMapper.selectOneById("1")).thenReturn(sampleUser);
+        when(userMapper.findById("1")).thenReturn(Optional.of(sampleUser));
 
         UserDTO result = authService.getUserById("1");
 
@@ -145,8 +153,8 @@ class AuthServiceTest {
 
     @Test
     void getUserById_NotFound() {
-        when(userMapper.selectOneById("nonexistent")).thenReturn(null);
+        when(userMapper.findById("nonexistent")).thenReturn(Optional.empty());
 
-        assertThrows(RuntimeException.class, () -> authService.getUserById("nonexistent"));
+        assertThrows(EntityNotFoundException.class, () -> authService.getUserById("nonexistent"));
     }
 }

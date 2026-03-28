@@ -1,24 +1,12 @@
 -- ============================================================
--- GeoEdu 测试数据初始化脚本
--- 执行方式: docker-compose exec postgres psql -U postgres -d geoedu -f /docker-entrypoint-initdb.d/init.sql
--- 或: 重启应用自动执行 (spring.sql.init.mode=always)
+-- GeoEdu 智能数据初始化脚本
+-- 特点: 使用 ON CONFLICT DO NOTHING，数据存在时跳过插入
+-- 执行方式: 重启应用自动执行 (spring.sql.init.mode=always)
 -- ============================================================
-
--- 清理已有数据（按依赖顺序）
-TRUNCATE TABLE knowledge_image RESTART IDENTITY CASCADE;
-TRUNCATE TABLE chat_log RESTART IDENTITY CASCADE;
-TRUNCATE TABLE verify_code RESTART IDENTITY CASCADE;
-TRUNCATE TABLE question RESTART IDENTITY CASCADE;
-TRUNCATE TABLE image RESTART IDENTITY CASCADE;
-TRUNCATE TABLE knowledge RESTART IDENTITY CASCADE;
-TRUNCATE TABLE users RESTART IDENTITY CASCADE;
 
 -- ============================================================
 -- 1. 用户数据（BCrypt 加密密码）
--- 密码说明:
---   admin123 -> $2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iAt6Z5EH
---   teacher123 -> $2a$10$XURPSh0h.7hS7Yj7g7g7gO  (实际使用时建议重新生成)
--- 实际使用 mock 登录，不需要真实密码哈希
+-- 密码说明: 所有用户密码均为 password123
 -- ============================================================
 
 INSERT INTO users (id, username, password_hash, role) VALUES
@@ -26,12 +14,11 @@ INSERT INTO users (id, username, password_hash, role) VALUES
 ('U002', 'teacher', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iAt6Z5EH', 'TEACHER'),
 ('U003', 'student', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iAt6Z5EH', 'STUDENT'),
 ('U004', 'teacher2', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iAt6Z5EH', 'TEACHER'),
-('U005', 'student2', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iAt6Z5EH', 'STUDENT');
+('U005', 'student2', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iAt6Z5EH', 'STUDENT')
+ON CONFLICT (id) DO NOTHING;
 
 -- ============================================================
 -- 2. 知识库数据（高一地理）
--- 年级: 高一
--- 章节: 第一章 行星地球 / 第二章 地球上的大气 / 第三章 地球上的水 / 第四章 地表形态的塑造
 -- ============================================================
 
 INSERT INTO knowledge (id, title, content, difficulty, page_number, grade, chapter, created_at, updated_at) VALUES
@@ -172,7 +159,8 @@ INSERT INTO knowledge (id, title, content, difficulty, page_number, grade, chapt
 
 风沙地貌：干旱半干旱地区风力作用形成的地貌，包括风蚀地貌（如风蚀柱、风蚀城堡）和风积地貌（如新月形沙丘、沙漠）。
 
-海岸地貌：海浪、潮汐等海水运动作用于海岸形成的地貌，包括海蚀地貌（如海蚀崖、海蚀洞）和海积地貌（如海滩、沙嘴）。', 'medium', 80, '高一', '第四章 地表形态的塑造', NOW(), NOW());
+海岸地貌：海浪、潮汐等海水运动作用于海岸形成的地貌，包括海蚀地貌（如海蚀崖、海蚀洞）和海积地貌（如海滩、沙嘴）。', 'medium', 80, '高一', '第四章 地表形态的塑造', NOW(), NOW())
+ON CONFLICT (id) DO NOTHING;
 
 -- ============================================================
 -- 3. 题目数据
@@ -195,7 +183,8 @@ INSERT INTO question (id, knowledge_id, question, answer, type, created_at) VALU
 
 -- 地貌相关题目
 ('Q009', 'K014', '板块边界有哪几种类型？请举例说明', '板块边界分为三种类型：1) 离散型边界 - 板块相互远离，形成裂谷和海洋，如大西洋中脊、东非大裂谷；2) 汇聚型边界 - 板块相互碰撞，形成山脉和海沟，如喜马拉雅山脉、马里亚纳海沟；3) 转换型边界 - 板块相互滑动，形成断裂带，如圣安德烈斯断层。', 'default', NOW()),
-('Q010', 'K015', '什么是喀斯特地貌？中国哪里有典型分布？', '喀斯特地貌是可溶性岩石（主要是石灰岩）在含有二氧化碳的流水长期作用下形成的特殊地貌。主要形态包括石芽、溶沟、峰林、溶洞、地下河等。中国云南石林和广西桂林山水是喀斯特地貌的典型代表。', 'default', NOW());
+('Q010', 'K015', '什么是喀斯特地貌？中国哪里有典型分布？', '喀斯特地貌是可溶性岩石（主要是石灰岩）在含有二氧化碳的流水长期作用下形成的特殊地貌。主要形态包括石芽、溶沟、峰林、溶洞、地下河等。中国云南石林和广西桂林山水是喀斯特地貌的典型代表。', 'default', NOW())
+ON CONFLICT (id) DO NOTHING;
 
 -- ============================================================
 -- 4. 图片数据
@@ -206,7 +195,8 @@ INSERT INTO image (id, path, original_name, file_size, mime_type, created_at) VA
 ('IMG002', '/data/images/atmosphere_layers.jpg', '大气分层.jpg', 850000, 'image/jpeg', NOW()),
 ('IMG003', '/data/images/water_cycle.jpg', '水循环示意图.jpg', 1200000, 'image/jpeg', NOW()),
 ('IMG004', '/data/images/plate_tectonics.jpg', '板块构造图.jpg', 1500000, 'image/jpeg', NOW()),
-('IMG005', '/data/images/karst_landscape.jpg', '喀斯特地貌.jpg', 980000, 'image/jpeg', NOW());
+('IMG005', '/data/images/karst_landscape.jpg', '喀斯特地貌.jpg', 980000, 'image/jpeg', NOW())
+ON CONFLICT (id) DO NOTHING;
 
 -- ============================================================
 -- 5. 知识-图片关联
@@ -217,17 +207,8 @@ INSERT INTO knowledge_image (knowledge_id, image_id, display_order) VALUES
 ('K005', 'IMG002', 1),
 ('K009', 'IMG003', 1),
 ('K014', 'IMG004', 1),
-('K015', 'IMG005', 1);
-
--- ============================================================
--- 6. 聊天记录（模拟历史对话）
--- ============================================================
-
-INSERT INTO chat_log (id, session_id, question, answer, retrieved_knowledge, user_id, created_at) VALUES
-('CL001', 'S001', '地球的内部结构是什么样的？', '地球的内部结构可以分为三层：地壳、地幔和地核。地壳是地球表面最外层的固体薄壳，厚度不均匀；地幔位于地壳和地核之间，厚度约2900千米；地核是地球内部最深的部分，分为液态的外核和固态的内核，主要由铁和镍组成。', 'K001,K002', 'U003', NOW() - INTERVAL '1 day'),
-('CL002', 'S001', '大气层分为哪几层？', '大气层自下而上分为五层：对流层、平流层、中间层、热层和外逸层。对流层是大气的最低层，平均厚度约12千米，是天气现象发生的主要层区；平流层位于对流层之上，空气以水平运动为主，适合飞机飞行。', 'K005', 'U003', NOW() - INTERVAL '1 day'),
-('CL003', 'S002', '什么是水循环？', '水循环是指自然界的水在地理环境中通过蒸发、水汽输送、降水、径流等环节不断运动、转化和更新的过程。水循环使陆地淡水资源不断更新，调节全球热量平衡，是地球生态系统中最重要的物质循环之一。', 'K009', 'U005', NOW() - INTERVAL '2 day'),
-('CL004', 'S003', '板块构造学说能解释哪些现象？', '板块构造学说能够较好地解释火山、地震的分布规律，高大山脉的形成，大陆漂移现象等。根据这一学说，地球岩石圈分为六大板块，板块交界处地壳活动频繁，是火山地震的主要发生地带。', 'K014', 'U004', NOW() - INTERVAL '3 day');
+('K015', 'IMG005', 1)
+ON CONFLICT (knowledge_id, image_id) DO NOTHING;
 
 -- ============================================================
 -- 完成

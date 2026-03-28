@@ -10,10 +10,10 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class QuestionDTO {
-    private Long id;
+    private String id;
     private String content;
     private String type;
     private String answer;
     private String explanation;
-    private Long knowledgeId;
+    private String knowledgeId;
 }
