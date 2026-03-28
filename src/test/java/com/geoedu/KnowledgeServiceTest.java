@@ -1,5 +1,6 @@
 package com.geoedu;
 
+import com.geoedu.exception.EntityNotFoundException;
 import com.geoedu.mapper.KnowledgeMapper;
 import com.geoedu.model.dto.KnowledgeCreateRequest;
 import com.geoedu.model.dto.KnowledgeDTO;
@@ -14,8 +15,10 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.ai.vectorstore.VectorStore;
 
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -31,6 +34,9 @@ class KnowledgeServiceTest {
 
     @Mock
     private VectorService vectorService;
+
+    @Mock
+    private VectorStore vectorStore;
 
     @InjectMocks
     private KnowledgeService knowledgeService;
@@ -51,6 +57,7 @@ class KnowledgeServiceTest {
                 .build();
 
         createRequest = KnowledgeCreateRequest.builder()
+                .id("1")
                 .title("地球自转")
                 .content("地球绕地轴自西向东转动")
                 .difficulty("medium")
@@ -62,7 +69,7 @@ class KnowledgeServiceTest {
 
     @Test
     void createKnowledge_Success() {
-        doNothing().when(knowledgeMapper).insert(any(Knowledge.class));
+        when(knowledgeMapper.insert(any(Knowledge.class))).thenReturn(1);
         when(vectorService.embedText(anyString())).thenReturn(new float[128]);
 
         KnowledgeDTO result = knowledgeService.create(createRequest);
@@ -78,26 +85,27 @@ class KnowledgeServiceTest {
 
     @Test
     void getById_Success() {
-        when(knowledgeMapper.selectOneById("1")).thenReturn(sampleKnowledge);
+        when(knowledgeMapper.selectById("1")).thenReturn(sampleKnowledge);
 
         KnowledgeDTO result = knowledgeService.getById("1");
 
         assertNotNull(result);
         assertEquals("地球自转", result.getTitle());
-        verify(knowledgeMapper, times(1)).selectOneById("1");
+        verify(knowledgeMapper, times(1)).selectById("1");
     }
 
     @Test
     void getById_NotFound() {
-        when(knowledgeMapper.selectOneById("nonexistent")).thenReturn(null);
+        when(knowledgeMapper.selectById("nonexistent")).thenReturn(null);
 
-        assertThrows(RuntimeException.class, () -> knowledgeService.getById("nonexistent"));
+        assertThrows(EntityNotFoundException.class, () -> knowledgeService.getById("nonexistent"));
     }
 
     @Test
     void list_WithPagination() {
-        List<Knowledge> knowledgeList = Arrays.asList(sampleKnowledge);
-        when(knowledgeMapper.selectAll()).thenReturn(knowledgeList);
+        List<Knowledge> knowledgeList = Collections.singletonList(sampleKnowledge);
+        when(knowledgeMapper.selectByConditions(any(), any(), any(), anyInt(), anyInt())).thenReturn(knowledgeList);
+        when(knowledgeMapper.countByConditions(any(), any(), any())).thenReturn(1L);
 
         PageResponse<KnowledgeDTO> result = knowledgeService.list(0, 10, null, null, null);
 
@@ -114,31 +122,32 @@ class KnowledgeServiceTest {
                 .content("地球绕太阳转动")
                 .build();
 
-        when(knowledgeMapper.selectOneById("1")).thenReturn(sampleKnowledge);
-        doNothing().when(knowledgeMapper).update(any(Knowledge.class));
+        when(knowledgeMapper.selectById("1")).thenReturn(sampleKnowledge);
+        when(knowledgeMapper.update(any(Knowledge.class))).thenReturn(1);
         when(vectorService.embedText(anyString())).thenReturn(new float[128]);
 
         KnowledgeDTO result = knowledgeService.update("1", updateRequest);
 
         assertNotNull(result);
-        verify(knowledgeMapper, times(1)).selectOneById("1");
+        verify(knowledgeMapper, times(1)).selectById("1");
         verify(knowledgeMapper, times(1)).update(any(Knowledge.class));
     }
 
     @Test
     void deleteKnowledge_Success() {
-        when(knowledgeMapper.selectOneById("1")).thenReturn(sampleKnowledge);
-        doNothing().when(knowledgeMapper).deleteById("1");
+        when(knowledgeMapper.selectById("1")).thenReturn(sampleKnowledge);
+        when(knowledgeMapper.deleteById("1")).thenReturn(1);
 
         knowledgeService.delete("1");
 
         verify(knowledgeMapper, times(1)).deleteById("1");
+        verify(vectorStore, times(1)).delete(any(List.class));
     }
 
     @Test
     void deleteKnowledge_NotFound() {
-        when(knowledgeMapper.selectOneById("nonexistent")).thenReturn(null);
+        when(knowledgeMapper.selectById("nonexistent")).thenReturn(null);
 
-        assertThrows(RuntimeException.class, () -> knowledgeService.delete("nonexistent"));
+        assertThrows(EntityNotFoundException.class, () -> knowledgeService.delete("nonexistent"));
     }
 }

@@ -7,47 +7,62 @@ import io.jsonwebtoken.MalformedJwtException;
 import io.jsonwebtoken.UnsupportedJwtException;
 import io.jsonwebtoken.security.Keys;
 import io.jsonwebtoken.security.SignatureException;
-import org.springframework.beans.factory.annotation.Value;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.Date;
+import java.util.List;
 
 @Component
+@RequiredArgsConstructor
 public class JwtTokenProvider {
 
-    private final SecretKey secretKey;
-    private final long expiration;
+    private final JwtProperties jwtProperties;
+    
+    private static final List<String> VALID_ROLES = Arrays.asList("student", "teacher", "admin");
 
-    public JwtTokenProvider(
-            @Value("${jwt.secret}") String secret,
-            @Value("${jwt.expiration}") long expiration) {
-        this.secretKey = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
-        this.expiration = expiration;
+    private SecretKey getSecretKey() {
+        return Keys.hmacShaKeyFor(jwtProperties.getSecret().getBytes(StandardCharsets.UTF_8));
     }
 
-    public String generateToken(String username, String userId) {
+    public String generateToken(String userId, String username, String role) {
+        if (!VALID_ROLES.contains(role.toLowerCase())) {
+            throw new IllegalArgumentException("Invalid role: " + role + ". Valid roles are: " + VALID_ROLES);
+        }
+        
         Date now = new Date();
-        Date expiryDate = new Date(now.getTime() + expiration);
+        Date expiryDate = new Date(now.getTime() + jwtProperties.getExpiration());
 
         return Jwts.builder()
-                .subject(username)
-                .claim("userId", userId)
+                .subject(userId)
+                .claim("username", username)
+                .claim("role", role)
                 .issuedAt(now)
                 .expiration(expiryDate)
-                .signWith(secretKey)
+                .signWith(getSecretKey())
                 .compact();
-    }
-
-    public String getUsernameFrom(String token) {
-        Claims claims = getClaims(token);
-        return claims.getSubject();
     }
 
     public String getUserIdFrom(String token) {
         Claims claims = getClaims(token);
-        return claims.get("userId", String.class);
+        return claims.getSubject();
+    }
+
+    public String getUsernameFromToken(String token) {
+        Claims claims = getClaims(token);
+        return claims.get("username", String.class);
+    }
+
+    public String getRoleFrom(String token) {
+        Claims claims = getClaims(token);
+        return claims.get("role", String.class);
+    }
+
+    public long getExpiration() {
+        return jwtProperties.getExpiration();
     }
 
     public boolean validate(String token) {
@@ -69,7 +84,7 @@ public class JwtTokenProvider {
 
     private Claims getClaims(String token) {
         return Jwts.parser()
-                .verifyWith(secretKey)
+                .verifyWith(getSecretKey())
                 .build()
                 .parseSignedClaims(token)
                 .getPayload();

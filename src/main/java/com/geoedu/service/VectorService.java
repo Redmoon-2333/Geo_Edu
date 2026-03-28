@@ -1,146 +1,99 @@
 package com.geoedu.service;
 
+import com.geoedu.config.VectorProperties;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.data.redis.connection.RedisConnection;
-import org.springframework.data.redis.core.RedisTemplate;
-import org.springframework.data.redis.core.script.RedisScript;
+import org.springframework.ai.embedding.EmbeddingModel;
+import org.springframework.ai.vectorstore.SearchRequest;
+import org.springframework.ai.vectorstore.VectorStore;
+import org.springframework.ai.document.Document;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.RestTemplate;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class VectorService {
 
-    private final RedisTemplate<String, String> redisTemplate;
-    private final RestTemplate restTemplate;
+    private final EmbeddingModel embeddingModel;
+    private final VectorStore vectorStore;
+    private final VectorProperties vectorProperties;
 
-    @Value("${ollama.base-url}")
-    private String ollamaBaseUrl;
-
-    @Value("${ollama.embedding-model}")
-    private String embeddingModel;
-
-    @Value("${app.vector.dimension}")
-    private int vectorDimension;
-
-    private static final String VECTOR_KEY_PREFIX = "knowledge:vector:";
-    private static final String VECTOR_INDEX_NAME = "knowledge_vector_index";
+    private static final String VECTOR_KEY_PREFIX = "geoedu:vector:";
 
     @PostConstruct
     public void initVectorIndex() {
-        try {
-            RedisConnection connection = redisTemplate.getConnectionFactory().getConnection();
-            try {
-                String indexExists = "FT.INFO " + VECTOR_INDEX_NAME;
-                if (!connection.commands().exec().toString().contains(VECTOR_INDEX_NAME)) {
-                    String createIndexCmd = String.format(
-                            "FT.CREATE %s ON hash SCHEMA vector AS vector VECTOR HNSW 6 TYPE FLOAT32 DIM %d DISTANCE_METRIC COSINE",
-                            VECTOR_INDEX_NAME, vectorDimension
-                    );
-                    connection.commands().exec().forEach(cmd -> log.debug("Redis response: {}", cmd));
-                }
-            } finally {
-                connection.close();
-            }
-            log.info("Vector index initialized successfully");
-        } catch (Exception e) {
-            log.warn("Failed to initialize vector index, will retry on first use: {}", e.getMessage());
-        }
+        log.info("Vector service initialized (using SpringAI VectorStore with prefix: {}, dimension: {})", 
+            VECTOR_KEY_PREFIX, vectorProperties.getDimension());
     }
 
     public float[] embedText(String text) {
-        String url = ollamaBaseUrl + "/api/embeddings";
-
-        Map<String, Object> requestBody = new HashMap<>();
-        requestBody.put("model", embeddingModel);
-        requestBody.put("prompt", text);
-
-        Map<String, Object> response = restTemplate.postForObject(url, requestBody, Map.class);
-
-        if (response == null || !response.containsKey("embedding")) {
-            throw new RuntimeException("Failed to get embedding from Ollama");
-        }
-
-        @SuppressWarnings("unchecked")
-        List<Number> embedding = (List<Number>) response.get("embedding");
-        float[] vector = new float[embedding.size()];
-        for (int i = 0; i < embedding.size(); i++) {
-            vector[i] = embedding.get(i).floatValue();
-        }
-        return vector;
+        return embeddingModel.embed(text);
     }
 
     public void saveVector(String knowledgeId, float[] vector, Map<String, String> metadata) {
-        String key = VECTOR_KEY_PREFIX + knowledgeId;
+        String content = metadata.getOrDefault("title", "") + " " + metadata.getOrDefault("content", "");
 
-        Map<String, String> hashData = new HashMap<>();
-        hashData.put("vector", floatArrayToString(vector));
-        if (metadata != null) {
-            metadata.forEach(hashData::put);
-        }
+        Document document = Document.builder()
+                .id(knowledgeId)
+                .text(content)
+                .metadata(new HashMap<>(metadata))
+                .build();
 
-        redisTemplate.opsForHash().putAll(key, hashData);
-        log.debug("Saved vector for knowledge: {}", knowledgeId);
+        vectorStore.add(List.of(document));
+        log.debug("Saved vector for knowledge: {} via VectorStore", knowledgeId);
     }
 
-    public List<SearchResult> searchSimilar(float[] queryVector, int topK, Map<String, String> filters) {
-        String queryVectorStr = floatArrayToString(queryVector);
+    public List<SearchResult> searchSimilar(String queryText, int topK, Map<String, String> filters) {
+        int effectiveTopK = topK > 0 ? topK : vectorProperties.getSearchTopK();
+        
+        List<Document> results = vectorStore.similaritySearch(SearchRequest.builder()
+                .query(queryText)
+                .topK(effectiveTopK)
+                .filterExpression(buildFilterExpression(filters))
+                .build());
 
-        StringBuilder filterStr = new StringBuilder();
-        if (filters != null && !filters.isEmpty()) {
-            filterStr.append("@grade:{").append(filters.getOrDefault("grade", "*")).append("} ");
-            filterStr.append("@chapter:{").append(filters.getOrDefault("chapter", "*")).append("} ");
-            filterStr.append("@difficulty:{").append(filters.getOrDefault("difficulty", "*")).append("}");
+        return results.stream()
+                .map(doc -> {
+                    Map<String, String> stringMetadata = new HashMap<>();
+                    doc.getMetadata().forEach((k, v) -> stringMetadata.put(k, String.valueOf(v)));
+                    return SearchResult.builder()
+                            .knowledgeId(doc.getId())
+                            .score(extractScoreFromDocument(doc))
+                            .metadata(stringMetadata)
+                            .build();
+                })
+                .collect(Collectors.toList());
+    }
+
+    private float extractScoreFromDocument(Document doc) {
+        // Spring AI 1.0.0-M6 不支持 getScore() 方法
+        // 尝试从 metadata 中获取分数
+        Object scoreFromMetadata = doc.getMetadata().get("score");
+        if (scoreFromMetadata instanceof Number) {
+            return ((Number) scoreFromMetadata).floatValue();
+        }
+        // 如果无法获取分数，返回默认值
+        // TODO: 升级到 Spring AI 1.0.0-M7+ 后可以使用 doc.getScore()
+        return 1.0f;
+    }
+
+    private String buildFilterExpression(Map<String, String> filters) {
+        if (filters == null || filters.isEmpty()) {
+            return null;
         }
 
-        String searchCmd = String.format(
-                "FT.SEARCH %s \"[%s]\" LIMIT 0 %d RETURN 2 vector metadata",
-                VECTOR_INDEX_NAME, queryVectorStr, topK
-        );
-
-        if (filterStr.length() > 0) {
-            searchCmd += " FILTER " + filterStr;
-        }
-
-        @SuppressWarnings("unchecked")
-        List<Object> rawResults = (List<Object>) redisTemplate.execute(
-                RedisScript.of(searchCmd),
-                Collections.emptyList()
-        );
-
-        List<SearchResult> results = new ArrayList<>();
-        if (rawResults != null) {
-            for (int i = 0; i < rawResults.size(); i += 2) {
-                String key = (String) rawResults.get(i);
-                @SuppressWarnings("unchecked")
-                Map<String, String> metadata = (Map<String, String>) rawResults.get(i + 1);
-                results.add(SearchResult.builder()
-                        .knowledgeId(key.replace(VECTOR_KEY_PREFIX, ""))
-                        .metadata(metadata)
-                        .score(1.0f)
-                        .build());
+        List<String> expressions = new ArrayList<>();
+        for (Map.Entry<String, String> entry : filters.entrySet()) {
+            if (!"*".equals(entry.getValue())) {
+                expressions.add(String.format("%s == '%s'", entry.getKey(), entry.getValue()));
             }
         }
 
-        return results;
-    }
-
-    private String floatArrayToString(float[] array) {
-        StringBuilder sb = new StringBuilder("[");
-        for (int i = 0; i < array.length; i++) {
-            sb.append(array[i]);
-            if (i < array.length - 1) {
-                sb.append(",");
-            }
-        }
-        sb.append("]");
-        return sb.toString();
+        return expressions.isEmpty() ? null : String.join(" && ", expressions);
     }
 
     @lombok.Data

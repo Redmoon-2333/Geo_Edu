@@ -16,6 +16,18 @@ public interface KnowledgeMapper {
 
     List<Knowledge> selectAllByIds(@Param("ids") List<String> ids);
 
+    List<Knowledge> selectByConditions(
+            @Param("grade") String grade,
+            @Param("chapter") String chapter,
+            @Param("difficulty") String difficulty,
+            @Param("offset") int offset,
+            @Param("size") int size);
+
+    long countByConditions(
+            @Param("grade") String grade,
+            @Param("chapter") String chapter,
+            @Param("difficulty") String difficulty);
+
     @Select("SELECT * FROM knowledge WHERE grade = #{grade}")
     List<Knowledge> findByGrade(@Param("grade") String grade);
 
@@ -34,6 +46,13 @@ public interface KnowledgeMapper {
     @Select("SELECT * FROM knowledge WHERE LOWER(title) LIKE LOWER(CONCAT('%', #{keyword}, '%')) " +
             "OR LOWER(content) LIKE LOWER(CONCAT('%', #{keyword}, '%'))")
     List<Knowledge> searchByKeyword(@Param("keyword") String keyword);
+
+    List<Knowledge> searchByKeywordPaged(
+            @Param("keyword") String keyword,
+            @Param("offset") int offset,
+            @Param("size") int size);
+
+    long countByKeyword(@Param("keyword") String keyword);
 
     @Insert("INSERT INTO knowledge (id, title, content, difficulty, page_number, grade, chapter, created_at, updated_at) " +
             "VALUES (#{id}, #{title}, #{content}, #{difficulty}, #{pageNumber}, #{grade}, #{chapter}, #{createdAt}, #{updatedAt})")

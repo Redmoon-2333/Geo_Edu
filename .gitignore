@@ -84,3 +84,4 @@ surefire-reports/
 
 # Trae (AI Assistant)
 /.trae/
+REDIS_STACK_SPRING_AI_USAGE.md

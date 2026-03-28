@@ -8,15 +8,18 @@ public class PromptBuilder {
 
     public static String buildRagPrompt(String question, List<Knowledge> retrieved) {
         StringBuilder knowledgeText = new StringBuilder();
-        for (int i = 0; i < retrieved.size(); i++) {
-            Knowledge k = retrieved.get(i);
-            knowledgeText.append(String.format("%d. 【%s】%s - %s",
-                    i + 1,
-                    k.getTitle(),
-                    k.getChapter() != null ? k.getChapter() : "",
-                    k.getContent()));
-            if (i < retrieved.size() - 1) {
-                knowledgeText.append("\n\n");
+        
+        if (retrieved != null && !retrieved.isEmpty()) {
+            for (int i = 0; i < retrieved.size(); i++) {
+                Knowledge k = retrieved.get(i);
+                knowledgeText.append(String.format("%d. 【%s】%s - %s",
+                        i + 1,
+                        k.getTitle(),
+                        k.getChapter() != null ? k.getChapter() : "",
+                        k.getContent()));
+                if (i < retrieved.size() - 1) {
+                    knowledgeText.append("\n\n");
+                }
             }
         }
 

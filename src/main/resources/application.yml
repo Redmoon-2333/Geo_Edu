@@ -24,6 +24,14 @@ spring:
       schema-locations: classpath:schema.sql
       data-locations: classpath:init.sql
 
+  ai:
+    ollama:
+      base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
+      chat:
+        model: ${OLLAMA_MODEL:qwen2.5:7b}
+      embedding:
+        model: ${OLLAMA_EMBEDDING_MODEL:nomic-embed-text}
+
 mybatis:
   mapper-locations: classpath:mapper/*.xml
   type-aliases-package: com.geoedu.model.entity
