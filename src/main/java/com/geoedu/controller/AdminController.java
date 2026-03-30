@@ -1,6 +1,7 @@
 package com.geoedu.controller;
 
 import com.geoedu.model.dto.ApiResponse;
+import com.geoedu.service.HealthCheckService;
 import com.geoedu.service.KnowledgeService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -17,16 +18,27 @@ import java.util.Map;
 public class AdminController {
 
     private final KnowledgeService knowledgeService;
+    private final HealthCheckService healthCheckService;
 
     @GetMapping("/health")
     public ApiResponse<Map<String, Object>> health() {
-        Map<String, Object> health = new HashMap<>();
-        health.put("status", "UP");
-        health.put("database", "UP");
-        health.put("redis", "UP");
-        health.put("ollama", "UP");
-
+        Map<String, Object> health = healthCheckService.checkAll();
         return ApiResponse.success(health);
+    }
+
+    @GetMapping("/health/database")
+    public ApiResponse<Map<String, Object>> healthDatabase() {
+        return ApiResponse.success(healthCheckService.checkDatabase());
+    }
+
+    @GetMapping("/health/redis")
+    public ApiResponse<Map<String, Object>> healthRedis() {
+        return ApiResponse.success(healthCheckService.checkRedis());
+    }
+
+    @GetMapping("/health/ollama")
+    public ApiResponse<Map<String, Object>> healthOllama() {
+        return ApiResponse.success(healthCheckService.checkOllama());
     }
 
     @PreAuthorize("hasRole('ADMIN')")
