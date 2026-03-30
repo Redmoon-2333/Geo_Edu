@@ -26,4 +26,10 @@ public interface QuestionMapper {
 
     @Delete("DELETE FROM question WHERE id = #{id}")
     int deleteById(@Param("id") String id);
+
+    @Select("SELECT * FROM question WHERE knowledge_id IN (${knowledgeIds}) ORDER BY created_at DESC LIMIT #{limit}")
+    List<Question> findByKnowledgeIds(@Param("knowledgeIds") String knowledgeIds, @Param("limit") int limit);
+
+    @Select("SELECT * FROM question ORDER BY created_at DESC LIMIT #{limit}")
+    List<Question> findRecentQuestions(@Param("limit") int limit);
 }

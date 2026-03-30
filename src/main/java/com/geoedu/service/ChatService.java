@@ -1,17 +1,19 @@
 package com.geoedu.service;
 
 import com.geoedu.mapper.ChatLogMapper;
+import com.geoedu.mapper.KnowledgeImageMapper;
 import com.geoedu.mapper.KnowledgeMapper;
-import com.geoedu.model.dto.ChatRequest;
-import com.geoedu.model.dto.ChatResponse;
-import com.geoedu.model.dto.ImageDTO;
-import com.geoedu.model.dto.KnowledgeBaseDTO;
+import com.geoedu.mapper.QuestionMapper;
+import com.geoedu.model.dto.*;
 import com.geoedu.model.entity.ChatLog;
+import com.geoedu.model.entity.Image;
 import com.geoedu.model.entity.Knowledge;
+import com.geoedu.model.entity.Question;
 import com.geoedu.util.PromptBuilder;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.util.*;
@@ -24,8 +26,13 @@ public class ChatService {
 
     private final VectorService vectorService;
     private final KnowledgeMapper knowledgeMapper;
+    private final KnowledgeImageMapper knowledgeImageMapper;
+    private final QuestionMapper questionMapper;
     private final ChatLogMapper chatLogMapper;
     private final ChatClient chatClient;
+
+    @Value("${app.chat.related-questions.max:5}")
+    private int maxRelatedQuestions;
 
     public ChatResponse chat(ChatRequest request, String userId) {
         String question = request.getQuestion();
@@ -93,8 +100,10 @@ public class ChatService {
 
     private ChatResponse buildChatResponse(String answer, List<Knowledge> knowledgeList) {
         List<KnowledgeBaseDTO> relatedKnowledgeDTOs = new ArrayList<>();
+        List<ImageDTO> imageDTOs = new ArrayList<>();
+        List<QuestionDTO> relatedQuestions = new ArrayList<>();
 
-        if (knowledgeList != null) {
+        if (knowledgeList != null && !knowledgeList.isEmpty()) {
             for (Knowledge k : knowledgeList) {
                 KnowledgeBaseDTO dto = KnowledgeBaseDTO.builder()
                         .id(k.getId())
@@ -106,13 +115,70 @@ public class ChatService {
                         .build();
                 relatedKnowledgeDTOs.add(dto);
             }
+
+            List<String> knowledgeIds = knowledgeList.stream()
+                    .map(Knowledge::getId)
+                    .collect(Collectors.toList());
+            
+            String idsParam = knowledgeIds.stream()
+                    .map(id -> "'" + id + "'")
+                    .collect(Collectors.joining(","));
+            
+            List<Image> images = knowledgeImageMapper.findImagesByKnowledgeIds(idsParam);
+            
+            for (Image img : images) {
+                ImageDTO imageDTO = ImageDTO.builder()
+                        .id(img.getId())
+                        .path(img.getPath())
+                        .caption(img.getOriginalName())
+                        .build();
+                imageDTOs.add(imageDTO);
+            }
+            
+            log.debug("Found {} images for {} knowledge items", imageDTOs.size(), knowledgeIds.size());
+
+            List<Question> questions = questionMapper.findByKnowledgeIds(idsParam, maxRelatedQuestions);
+            for (Question q : questions) {
+                QuestionDTO questionDTO = QuestionDTO.builder()
+                        .id(q.getId())
+                        .content(q.getQuestion())
+                        .type(q.getType())
+                        .knowledgeId(q.getKnowledgeId())
+                        .build();
+                relatedQuestions.add(questionDTO);
+            }
+            
+            if (relatedQuestions.size() < maxRelatedQuestions) {
+                int remaining = maxRelatedQuestions - relatedQuestions.size();
+                List<Question> recentQuestions = questionMapper.findRecentQuestions(remaining + relatedQuestions.size());
+                Set<String> existingIds = relatedQuestions.stream()
+                        .map(QuestionDTO::getId)
+                        .collect(Collectors.toSet());
+                
+                for (Question q : recentQuestions) {
+                    if (!existingIds.contains(q.getId())) {
+                        QuestionDTO questionDTO = QuestionDTO.builder()
+                                .id(q.getId())
+                                .content(q.getQuestion())
+                                .type(q.getType())
+                                .knowledgeId(q.getKnowledgeId())
+                                .build();
+                        relatedQuestions.add(questionDTO);
+                        if (relatedQuestions.size() >= maxRelatedQuestions) {
+                            break;
+                        }
+                    }
+                }
+            }
+            
+            log.debug("Found {} related questions", relatedQuestions.size());
         }
 
         return ChatResponse.builder()
                 .answer(answer)
-                .images(Collections.emptyList())
+                .images(imageDTOs)
                 .relatedKnowledge(relatedKnowledgeDTOs)
-                .relatedQuestions(new ArrayList<>())
+                .relatedQuestions(relatedQuestions)
                 .build();
     }
 }

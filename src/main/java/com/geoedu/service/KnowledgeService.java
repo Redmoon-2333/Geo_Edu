@@ -1,5 +1,8 @@
 package com.geoedu.service;
 
+import com.alibaba.excel.EasyExcel;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.geoedu.exception.EntityNotFoundException;
 import com.geoedu.mapper.KnowledgeMapper;
 import com.geoedu.model.dto.*;
@@ -9,10 +12,13 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.io.IOException;
+import java.io.InputStream;
+import java.time.LocalDateTime;
+import java.util.*;
+import java.util.concurrent.atomic.AtomicInteger;
 
 @Service
 @RequiredArgsConstructor
@@ -188,5 +194,157 @@ public class KnowledgeService {
 
         log.info("Vector regeneration complete. Successfully regenerated {} vectors out of {} total.",
             successCount, allKnowledge.size());
+    }
+
+    @Transactional
+    public BatchImportResult importFromExcel(MultipartFile file) {
+        log.info("Starting Excel import for file: {}", file.getOriginalFilename());
+        
+        List<KnowledgeExcelDTO> excelData;
+        try (InputStream inputStream = file.getInputStream()) {
+            excelData = EasyExcel.read(inputStream)
+                    .head(KnowledgeExcelDTO.class)
+                    .sheet()
+                    .doReadSync();
+        } catch (IOException e) {
+            log.error("Failed to read Excel file: {}", e.getMessage());
+            throw new RuntimeException("读取Excel文件失败: " + e.getMessage());
+        }
+
+        return processBatchImport(excelData);
+    }
+
+    @Transactional
+    public BatchImportResult importFromJson(MultipartFile file) {
+        log.info("Starting JSON import for file: {}", file.getOriginalFilename());
+        
+        ObjectMapper objectMapper = new ObjectMapper();
+        List<KnowledgeCreateRequest> jsonData;
+        try (InputStream inputStream = file.getInputStream()) {
+            jsonData = objectMapper.readValue(inputStream, 
+                    new TypeReference<List<KnowledgeCreateRequest>>() {});
+        } catch (IOException e) {
+            log.error("Failed to read JSON file: {}", e.getMessage());
+            throw new RuntimeException("读取JSON文件失败: " + e.getMessage());
+        }
+
+        return processBatchImportFromRequest(jsonData);
+    }
+
+    @Transactional
+    public BatchImportResult importFromJsonList(List<KnowledgeCreateRequest> requests) {
+        log.info("Starting batch import from JSON list, count: {}", requests.size());
+        return processBatchImportFromRequest(requests);
+    }
+
+    private BatchImportResult processBatchImport(List<KnowledgeExcelDTO> excelData) {
+        List<KnowledgeCreateRequest> requests = excelData.stream()
+                .map(this::convertToRequest)
+                .toList();
+        return processBatchImportFromRequest(requests);
+    }
+
+    private KnowledgeCreateRequest convertToRequest(KnowledgeExcelDTO dto) {
+        String id = generateId(dto.getGrade(), dto.getChapter(), dto.getTitle());
+        return KnowledgeCreateRequest.builder()
+                .id(id)
+                .title(dto.getTitle())
+                .content(dto.getContent())
+                .difficulty(dto.getDifficulty() != null ? dto.getDifficulty() : "medium")
+                .pageNumber(dto.getPageNumber())
+                .grade(dto.getGrade())
+                .chapter(dto.getChapter())
+                .build();
+    }
+
+    private BatchImportResult processBatchImportFromRequest(List<KnowledgeCreateRequest> requests) {
+        int total = requests.size();
+        AtomicInteger successCount = new AtomicInteger(0);
+        List<KnowledgeDTO> importedItems = Collections.synchronizedList(new ArrayList<>());
+        List<String> errors = Collections.synchronizedList(new ArrayList<>());
+
+        int batchSize = 100;
+        for (int i = 0; i < total; i += batchSize) {
+            int end = Math.min(i + batchSize, total);
+            List<KnowledgeCreateRequest> batch = requests.subList(i, end);
+            
+            for (int j = 0; j < batch.size(); j++) {
+                KnowledgeCreateRequest request = batch.get(j);
+                int rowNum = i + j + 1;
+                
+                try {
+                    if (request.getTitle() == null || request.getTitle().isBlank()) {
+                        errors.add(String.format("第%d行: 标题不能为空", rowNum));
+                        continue;
+                    }
+                    if (request.getContent() == null || request.getContent().isBlank()) {
+                        errors.add(String.format("第%d行: 内容不能为空", rowNum));
+                        continue;
+                    }
+
+                    if (request.getId() == null || request.getId().isBlank()) {
+                        request.setId(generateId(request.getGrade(), request.getChapter(), request.getTitle()));
+                    }
+
+                    Knowledge knowledge = Knowledge.builder()
+                            .id(request.getId())
+                            .title(request.getTitle())
+                            .content(request.getContent())
+                            .difficulty(request.getDifficulty() != null ? request.getDifficulty() : "medium")
+                            .pageNumber(request.getPageNumber())
+                            .grade(request.getGrade())
+                            .chapter(request.getChapter())
+                            .createdAt(LocalDateTime.now())
+                            .updatedAt(LocalDateTime.now())
+                            .build();
+
+                    knowledgeMapper.insert(knowledge);
+                    
+                    generateAndSaveVector(knowledge);
+                    
+                    importedItems.add(toDTO(knowledge));
+                    successCount.incrementAndGet();
+                    
+                } catch (Exception e) {
+                    String errorMsg = String.format("第%d行: %s", rowNum, e.getMessage());
+                    errors.add(errorMsg);
+                    log.warn("Failed to import knowledge at row {}: {}", rowNum, e.getMessage());
+                }
+            }
+            
+            log.info("Batch import progress: {}/{}", Math.min(end, total), total);
+        }
+
+        log.info("Batch import completed. Total: {}, Success: {}, Failed: {}", 
+                total, successCount.get(), total - successCount.get());
+
+        if (errors.isEmpty()) {
+            return BatchImportResult.success(total, successCount.get(), importedItems);
+        } else {
+            return BatchImportResult.partial(total, successCount.get(), importedItems, errors);
+        }
+    }
+
+    private String generateId(String grade, String chapter, String title) {
+        StringBuilder sb = new StringBuilder();
+        
+        if (grade != null && !grade.isBlank()) {
+            sb.append(grade.replaceAll("[^a-zA-Z0-9]", "")).append("-");
+        } else {
+            sb.append("G-");
+        }
+        
+        if (chapter != null && !chapter.isBlank()) {
+            sb.append(chapter.replaceAll("[^a-zA-Z0-9]", "")).append("-");
+        }
+        
+        if (title != null && !title.isBlank()) {
+            String titlePart = title.length() > 20 ? title.substring(0, 20) : title;
+            sb.append(titlePart.replaceAll("[^a-zA-Z0-9\u4e00-\u9fa5]", ""));
+        }
+        
+        sb.append("-").append(System.currentTimeMillis() % 10000);
+        
+        return sb.toString();
     }
 }

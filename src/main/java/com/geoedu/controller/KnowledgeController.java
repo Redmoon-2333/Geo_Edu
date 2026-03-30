@@ -7,6 +7,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/knowledge")
@@ -64,5 +67,32 @@ public class KnowledgeController {
 
         PageResponse<KnowledgeDTO> response = knowledgeService.search(keyword, page, size);
         return ApiResponse.success(response);
+    }
+
+    @PostMapping("/batch/excel")
+    @PreAuthorize("hasAnyRole('TEACHER', 'ADMIN')")
+    public ApiResponse<BatchImportResult> importFromExcel(
+            @RequestParam("file") MultipartFile file) {
+
+        BatchImportResult result = knowledgeService.importFromExcel(file);
+        return ApiResponse.success(result);
+    }
+
+    @PostMapping("/batch/json")
+    @PreAuthorize("hasAnyRole('TEACHER', 'ADMIN')")
+    public ApiResponse<BatchImportResult> importFromJson(
+            @RequestParam("file") MultipartFile file) {
+
+        BatchImportResult result = knowledgeService.importFromJson(file);
+        return ApiResponse.success(result);
+    }
+
+    @PostMapping("/batch")
+    @PreAuthorize("hasAnyRole('TEACHER', 'ADMIN')")
+    public ApiResponse<BatchImportResult> importFromJsonList(
+            @RequestBody List<KnowledgeCreateRequest> requests) {
+
+        BatchImportResult result = knowledgeService.importFromJsonList(requests);
+        return ApiResponse.success(result);
     }
 }
