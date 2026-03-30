@@ -14,6 +14,5 @@ public class QuestionDTO {
     private String content;
     private String type;
     private String answer;
-    private String explanation;
     private String knowledgeId;
 }
