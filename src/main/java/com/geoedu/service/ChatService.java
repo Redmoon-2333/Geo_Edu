@@ -31,7 +31,7 @@ public class ChatService {
     private final ChatLogMapper chatLogMapper;
     private final ChatClient chatClient;
 
-    @Value("${app.chat.related-questions.max:5}")
+    @Value("${app.chat.related-questions.max:1}")
     private int maxRelatedQuestions;
 
     public ChatResponse chat(ChatRequest request, String userId) {
@@ -67,12 +67,12 @@ public class ChatService {
             String prompt = PromptBuilder.buildRagPrompt(question, retrieved);
             log.info("Calling Ollama with prompt length: {}", prompt.length());
             log.debug("Prompt content: {}", prompt);
-            
+
             String response = chatClient.prompt()
                     .user(prompt)
                     .call()
                     .content();
-            
+
             log.info("Ollama response received, length: {}", response != null ? response.length() : 0);
             return response;
         } catch (Exception e) {
@@ -119,13 +119,13 @@ public class ChatService {
             List<String> knowledgeIds = knowledgeList.stream()
                     .map(Knowledge::getId)
                     .collect(Collectors.toList());
-            
+
             String idsParam = knowledgeIds.stream()
                     .map(id -> "'" + id + "'")
                     .collect(Collectors.joining(","));
-            
+
             List<Image> images = knowledgeImageMapper.findImagesByKnowledgeIds(idsParam);
-            
+
             for (Image img : images) {
                 ImageDTO imageDTO = ImageDTO.builder()
                         .id(img.getId())
@@ -134,7 +134,7 @@ public class ChatService {
                         .build();
                 imageDTOs.add(imageDTO);
             }
-            
+
             log.debug("Found {} images for {} knowledge items", imageDTOs.size(), knowledgeIds.size());
 
             List<Question> questions = questionMapper.findByKnowledgeIds(idsParam, maxRelatedQuestions);
@@ -143,24 +143,26 @@ public class ChatService {
                         .id(q.getId())
                         .content(q.getQuestion())
                         .type(q.getType())
+                        .answer(q.getAnswer())
                         .knowledgeId(q.getKnowledgeId())
                         .build();
                 relatedQuestions.add(questionDTO);
             }
-            
+
             if (relatedQuestions.size() < maxRelatedQuestions) {
                 int remaining = maxRelatedQuestions - relatedQuestions.size();
                 List<Question> recentQuestions = questionMapper.findRecentQuestions(remaining + relatedQuestions.size());
                 Set<String> existingIds = relatedQuestions.stream()
                         .map(QuestionDTO::getId)
                         .collect(Collectors.toSet());
-                
+
                 for (Question q : recentQuestions) {
                     if (!existingIds.contains(q.getId())) {
                         QuestionDTO questionDTO = QuestionDTO.builder()
                                 .id(q.getId())
                                 .content(q.getQuestion())
                                 .type(q.getType())
+                                .answer(q.getAnswer())
                                 .knowledgeId(q.getKnowledgeId())
                                 .build();
                         relatedQuestions.add(questionDTO);
@@ -170,7 +172,7 @@ public class ChatService {
                     }
                 }
             }
-            
+
             log.debug("Found {} related questions", relatedQuestions.size());
         }
 
