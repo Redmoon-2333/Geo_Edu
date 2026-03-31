@@ -8,19 +8,15 @@ import lombok.NoArgsConstructor;
 import java.time.LocalDateTime;
 
 @Data
+@Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@Builder
-public class ChatLog {
-
+public class UserErrorBook {
     private String id;
-    private String sessionId;
-    private String question;
-    private String answer;
-    private String retrievedKnowledge;
-    private Integer responseTime;
     private String userId;
+    private String questionId;
+    private Integer errorCount;
+    private LocalDateTime lastErrorTime;
+    private Boolean isFavorited;
     private LocalDateTime createdAt;
-    private String sessionType;
-    private Boolean isFromErrorBook;
 }

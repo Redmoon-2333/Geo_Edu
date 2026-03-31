@@ -8,19 +8,18 @@ import lombok.NoArgsConstructor;
 import java.time.LocalDateTime;
 
 @Data
+@Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@Builder
-public class ChatLog {
-
+public class UserPracticeRecord {
     private String id;
-    private String sessionId;
-    private String question;
-    private String answer;
-    private String retrievedKnowledge;
-    private Integer responseTime;
     private String userId;
+    private String questionId;
+    private String knowledgeId;
+    private String userAnswer;
+    private Boolean isCorrect;
+    private String difficulty;
+    private String practiceType;
+    private Integer timeTaken;
     private LocalDateTime createdAt;
-    private String sessionType;
-    private Boolean isFromErrorBook;
 }

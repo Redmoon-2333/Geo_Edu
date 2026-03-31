@@ -75,3 +75,36 @@ CREATE INDEX IF NOT EXISTS idx_verify_code_expire_at ON verify_code(expire_at);
 
 CREATE INDEX IF NOT EXISTS idx_knowledge_grade_chapter ON knowledge(grade, chapter);
 CREATE INDEX IF NOT EXISTS idx_knowledge_difficulty ON knowledge(difficulty);
+
+CREATE TABLE IF NOT EXISTS user_error_book (
+    id VARCHAR(50) PRIMARY KEY,
+    user_id VARCHAR(50) NOT NULL,
+    question_id VARCHAR(50) NOT NULL,
+    error_count INTEGER DEFAULT 1,
+    last_error_time TIMESTAMP,
+    is_favorited BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_error_book_user_id ON user_error_book(user_id);
+CREATE INDEX IF NOT EXISTS idx_error_book_question_id ON user_error_book(question_id);
+
+CREATE TABLE IF NOT EXISTS user_practice_record (
+    id VARCHAR(50) PRIMARY KEY,
+    user_id VARCHAR(50) NOT NULL,
+    question_id VARCHAR(50) NOT NULL,
+    knowledge_id VARCHAR(50),
+    user_answer TEXT,
+    is_correct BOOLEAN NOT NULL,
+    difficulty VARCHAR(20),
+    practice_type VARCHAR(20) DEFAULT 'exercise',
+    time_taken INTEGER,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_practice_record_user_id ON user_practice_record(user_id);
+CREATE INDEX IF NOT EXISTS idx_practice_record_knowledge_id ON user_practice_record(knowledge_id);
+CREATE INDEX IF NOT EXISTS idx_practice_record_difficulty ON user_practice_record(difficulty);
+
+ALTER TABLE chat_log ADD COLUMN IF NOT EXISTS session_type VARCHAR(20) DEFAULT 'qa';
+ALTER TABLE chat_log ADD COLUMN IF NOT EXISTS is_from_error_book BOOLEAN DEFAULT FALSE;

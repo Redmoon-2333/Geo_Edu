@@ -23,6 +23,7 @@ spring:
       mode: always
       schema-locations: classpath:schema.sql
       data-locations: classpath:init.sql
+      encoding: UTF-8
 
   ai:
     ollama:

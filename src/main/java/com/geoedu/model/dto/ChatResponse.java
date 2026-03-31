@@ -16,4 +16,6 @@ public class ChatResponse {
     private List<ImageDTO> images;
     private List<KnowledgeBaseDTO> relatedKnowledge;
     private List<QuestionDTO> relatedQuestions;
+    private Boolean askFavoriteError;
+    private String questionId;
 }

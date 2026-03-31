@@ -120,11 +120,7 @@ public class ChatService {
                     .map(Knowledge::getId)
                     .collect(Collectors.toList());
 
-            String idsParam = knowledgeIds.stream()
-                    .map(id -> "'" + id + "'")
-                    .collect(Collectors.joining(","));
-
-            List<Image> images = knowledgeImageMapper.findImagesByKnowledgeIds(idsParam);
+            List<Image> images = knowledgeImageMapper.findImagesByKnowledgeIds(knowledgeIds);
 
             for (Image img : images) {
                 ImageDTO imageDTO = ImageDTO.builder()
@@ -137,7 +133,7 @@ public class ChatService {
 
             log.debug("Found {} images for {} knowledge items", imageDTOs.size(), knowledgeIds.size());
 
-            List<Question> questions = questionMapper.findByKnowledgeIds(idsParam, maxRelatedQuestions);
+            List<Question> questions = questionMapper.findByKnowledgeIds(knowledgeIds, maxRelatedQuestions);
             for (Question q : questions) {
                 QuestionDTO questionDTO = QuestionDTO.builder()
                         .id(q.getId())
