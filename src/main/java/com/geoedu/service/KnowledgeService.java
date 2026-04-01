@@ -3,6 +3,7 @@ package com.geoedu.service;
 import com.alibaba.excel.EasyExcel;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.geoedu.exception.BusinessException;
 import com.geoedu.exception.EntityNotFoundException;
 import com.geoedu.mapper.KnowledgeMapper;
 import com.geoedu.model.dto.*;
@@ -208,7 +209,7 @@ public class KnowledgeService {
                     .doReadSync();
         } catch (IOException e) {
             log.error("Failed to read Excel file: {}", e.getMessage());
-            throw new RuntimeException("读取Excel文件失败: " + e.getMessage());
+            throw new BusinessException("读取Excel文件失败: " + e.getMessage());
         }
 
         return processBatchImport(excelData);
@@ -225,7 +226,7 @@ public class KnowledgeService {
                     new TypeReference<List<KnowledgeCreateRequest>>() {});
         } catch (IOException e) {
             log.error("Failed to read JSON file: {}", e.getMessage());
-            throw new RuntimeException("读取JSON文件失败: " + e.getMessage());
+            throw new BusinessException("读取JSON文件失败: " + e.getMessage());
         }
 
         return processBatchImportFromRequest(jsonData);

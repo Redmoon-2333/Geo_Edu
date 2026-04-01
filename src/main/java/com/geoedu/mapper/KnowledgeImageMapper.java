@@ -34,4 +34,7 @@ public interface KnowledgeImageMapper {
 
     @Delete("DELETE FROM knowledge_image WHERE knowledge_id = #{knowledgeId} AND image_id = #{imageId}")
     int delete(@Param("knowledgeId") String knowledgeId, @Param("imageId") String imageId);
+
+    @Select("SELECT COUNT(*) FROM knowledge_image WHERE knowledge_id = #{knowledgeId} AND image_id = #{imageId}")
+    int exists(@Param("knowledgeId") String knowledgeId, @Param("imageId") String imageId);
 }

@@ -28,6 +28,18 @@ public interface ChatLogMapper {
     List<ChatLog> findByUserIdOrderByCreatedAtDesc(@Param("userId") String userId);
 
     @Select("SELECT * FROM chat_log WHERE user_id = #{userId} ORDER BY created_at DESC")
+    @Results({
+            @Result(property = "id", column = "id"),
+            @Result(property = "sessionId", column = "session_id"),
+            @Result(property = "question", column = "question"),
+            @Result(property = "answer", column = "answer"),
+            @Result(property = "retrievedKnowledge", column = "retrieved_knowledge"),
+            @Result(property = "responseTime", column = "response_time"),
+            @Result(property = "userId", column = "user_id"),
+            @Result(property = "createdAt", column = "created_at"),
+            @Result(property = "sessionType", column = "session_type"),
+            @Result(property = "isFromErrorBook", column = "is_from_error_book")
+    })
     List<ChatLog> findByUserId(@Param("userId") String userId);
 
     @Select("<script>" +

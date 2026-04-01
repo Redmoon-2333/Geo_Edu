@@ -1,5 +1,6 @@
 package com.geoedu.service;
 
+import com.geoedu.exception.BusinessException;
 import com.geoedu.mapper.ChatLogMapper;
 import com.geoedu.mapper.KnowledgeImageMapper;
 import com.geoedu.mapper.KnowledgeMapper;
@@ -16,6 +17,7 @@ import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -55,9 +57,11 @@ public class ChatService {
             log.info("Retrieved {} knowledge items", retrievedKnowledge != null ? retrievedKnowledge.size() : 0);
         }
 
+        long startTime = System.currentTimeMillis();
         String answer = callOllama(question, retrievedKnowledge);
+        int responseTime = (int) (System.currentTimeMillis() - startTime);
 
-        saveChatLog(userId, question, answer, retrievedKnowledge);
+        saveChatLog(userId, question, answer, retrievedKnowledge, responseTime);
 
         return buildChatResponse(answer, retrievedKnowledge);
     }
@@ -77,11 +81,11 @@ public class ChatService {
             return response;
         } catch (Exception e) {
             log.error("Failed to call Ollama: {}", e.getMessage(), e);
-            throw new RuntimeException("调用 AI 服务失败：" + e.getMessage(), e);
+            throw new BusinessException("调用 AI 服务失败：" + e.getMessage());
         }
     }
 
-    private void saveChatLog(String userId, String question, String answer, List<Knowledge> relatedKnowledge) {
+    private void saveChatLog(String userId, String question, String answer, List<Knowledge> relatedKnowledge, int responseTime) {
         try {
             ChatLog chatLog = ChatLog.builder()
                     .id(UUID.randomUUID().toString())
@@ -91,6 +95,10 @@ public class ChatService {
                     .retrievedKnowledge(relatedKnowledge.stream()
                             .map(Knowledge::getId)
                             .collect(Collectors.joining(",")))
+                    .responseTime(responseTime)
+                    .sessionType("qa")
+                    .isFromErrorBook(false)
+                    .createdAt(LocalDateTime.now())
                     .build();
             chatLogMapper.insert(chatLog);
         } catch (Exception e) {

@@ -6,6 +6,7 @@ import com.geoedu.mapper.QuestionMapper;
 import com.geoedu.mapper.UserPracticeRecordMapper;
 import com.geoedu.model.dto.ExerciseRequest;
 import com.geoedu.model.dto.ExerciseResponse;
+import com.geoedu.model.dto.PracticeRecordDTO;
 import com.geoedu.model.entity.Question;
 import com.geoedu.model.entity.UserPracticeRecord;
 import lombok.RequiredArgsConstructor;
@@ -15,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -161,5 +163,47 @@ public class ExerciseService {
             }
         }
         return options;
+    }
+
+    public List<PracticeRecordDTO> getUserPracticeRecords(String userId, String knowledgeId) {
+        log.info("Getting practice records for user {}, knowledgeId: {}", userId, knowledgeId);
+
+        List<UserPracticeRecord> records;
+        if (knowledgeId != null && !knowledgeId.isEmpty()) {
+            records = practiceRecordMapper.findByUserIdAndKnowledgeId(userId, knowledgeId);
+        } else {
+            records = practiceRecordMapper.findByUserId(userId);
+        }
+
+        if (records.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        List<String> questionIds = records.stream()
+                .map(UserPracticeRecord::getQuestionId)
+                .collect(Collectors.toList());
+        List<Question> questions = questionMapper.selectByIds(questionIds);
+        Map<String, Question> questionMap = questions.stream()
+                .collect(Collectors.toMap(Question::getId, q -> q));
+
+        List<PracticeRecordDTO> result = new ArrayList<>();
+        for (UserPracticeRecord record : records) {
+            Question question = questionMap.get(record.getQuestionId());
+            result.add(PracticeRecordDTO.builder()
+                    .id(record.getId())
+                    .questionId(record.getQuestionId())
+                    .knowledgeId(record.getKnowledgeId())
+                    .questionContent(question != null ? question.getQuestion() : null)
+                    .correctAnswer(question != null ? question.getAnswer() : null)
+                    .userAnswer(record.getUserAnswer())
+                    .isCorrect(record.getIsCorrect())
+                    .difficulty(record.getDifficulty())
+                    .practiceType(record.getPracticeType())
+                    .timeTaken(record.getTimeTaken())
+                    .createdAt(record.getCreatedAt())
+                    .build());
+        }
+
+        return result;
     }
 }
