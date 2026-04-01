@@ -1,22 +1,28 @@
 package com.geoedu.controller;
 
+import com.geoedu.mapper.KnowledgeImageMapper;
 import com.geoedu.model.dto.*;
+import com.geoedu.model.entity.Image;
 import com.geoedu.service.KnowledgeService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/v1/knowledge")
 @RequiredArgsConstructor
+@Slf4j
 public class KnowledgeController {
 
     private final KnowledgeService knowledgeService;
+    private final KnowledgeImageMapper knowledgeImageMapper;
 
     @GetMapping
     public ApiResponse<PageResponse<KnowledgeDTO>> list(
@@ -94,5 +100,51 @@ public class KnowledgeController {
 
         BatchImportResult result = knowledgeService.importFromJsonList(requests);
         return ApiResponse.success(result);
+    }
+
+    @GetMapping("/{id}/images")
+    public ApiResponse<List<ImageDTO>> getKnowledgeImages(@PathVariable String id) {
+        List<Image> images = knowledgeImageMapper.findImagesByKnowledgeId(id);
+        List<ImageDTO> imageDTOs = images.stream()
+                .map(img -> ImageDTO.builder()
+                        .id(img.getId())
+                        .path(img.getPath())
+                        .caption(img.getOriginalName())
+                        .build())
+                .collect(Collectors.toList());
+        return ApiResponse.success(imageDTOs);
+    }
+
+    @PostMapping("/{id}/images")
+    @PreAuthorize("hasAnyRole('TEACHER', 'ADMIN')")
+    public ApiResponse<Void> bindImageToKnowledge(
+            @PathVariable String id,
+            @RequestBody KnowledgeImageBindRequest request) {
+        try {
+            knowledgeImageMapper.insert(id, request.getImageId(), request.getDisplayOrder());
+            log.info("Bound image {} to knowledge {}", request.getImageId(), id);
+            return ApiResponse.success(null);
+        } catch (org.springframework.dao.DuplicateKeyException e) {
+            log.warn("Image {} already bound to knowledge {}", request.getImageId(), id);
+            return ApiResponse.error(400, "图片已绑定到该知识点");
+        }
+    }
+
+    @DeleteMapping("/{id}/images/{imageId}")
+    @PreAuthorize("hasAnyRole('TEACHER', 'ADMIN')")
+    public ApiResponse<Void> unbindImageFromKnowledge(
+            @PathVariable String id,
+            @PathVariable String imageId) {
+        knowledgeImageMapper.delete(id, imageId);
+        log.info("Unbound image {} from knowledge {}", imageId, id);
+        return ApiResponse.success(null);
+    }
+
+    @lombok.Data
+    @lombok.NoArgsConstructor
+    @lombok.AllArgsConstructor
+    public static class KnowledgeImageBindRequest {
+        private String imageId;
+        private Integer displayOrder;
     }
 }

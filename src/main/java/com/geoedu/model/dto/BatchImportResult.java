@@ -11,16 +11,16 @@ import java.util.List;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class BatchImportResult {
+public class BatchImportResult<T> {
 
     private int totalCount;
     private int successCount;
     private int failedCount;
     private List<String> errors;
-    private List<KnowledgeDTO> importedItems;
+    private List<T> importedItems;
 
-    public static BatchImportResult success(int total, int success, List<KnowledgeDTO> items) {
-        return BatchImportResult.builder()
+    public static <T> BatchImportResult<T> success(int total, int success, List<T> items) {
+        return BatchImportResult.<T>builder()
                 .totalCount(total)
                 .successCount(success)
                 .failedCount(total - success)
@@ -29,8 +29,8 @@ public class BatchImportResult {
                 .build();
     }
 
-    public static BatchImportResult partial(int total, int success, List<KnowledgeDTO> items, List<String> errors) {
-        return BatchImportResult.builder()
+    public static <T> BatchImportResult<T> partial(int total, int success, List<T> items, List<String> errors) {
+        return BatchImportResult.<T>builder()
                 .totalCount(total)
                 .successCount(success)
                 .failedCount(total - success)

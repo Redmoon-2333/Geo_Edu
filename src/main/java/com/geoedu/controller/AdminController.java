@@ -53,6 +53,7 @@ public class AdminController {
         return ApiResponse.success(result);
     }
 
+    @PreAuthorize("hasRole('ADMIN')")
     @PostMapping("/backup")
     public ApiResponse<Map<String, String>> backup() {
         Map<String, String> result = new HashMap<>();

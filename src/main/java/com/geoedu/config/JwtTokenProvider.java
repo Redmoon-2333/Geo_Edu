@@ -1,5 +1,6 @@
 package com.geoedu.config;
 
+import com.geoedu.exception.AuthenticationException;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.Jwts;
@@ -70,15 +71,15 @@ public class JwtTokenProvider {
             getClaims(token);
             return true;
         } catch (SignatureException e) {
-            throw new RuntimeException("Invalid JWT signature");
+            throw new AuthenticationException("Invalid JWT signature");
         } catch (MalformedJwtException e) {
-            throw new RuntimeException("Invalid JWT token");
+            throw new AuthenticationException("Invalid JWT token");
         } catch (ExpiredJwtException e) {
-            throw new RuntimeException("Expired JWT token");
+            throw new AuthenticationException("Expired JWT token");
         } catch (UnsupportedJwtException e) {
-            throw new RuntimeException("Unsupported JWT token");
+            throw new AuthenticationException("Unsupported JWT token");
         } catch (IllegalArgumentException e) {
-            throw new RuntimeException("JWT claims string is empty");
+            throw new AuthenticationException("JWT claims string is empty");
         }
     }
 
