@@ -89,7 +89,8 @@ public class VectorService {
         List<String> expressions = new ArrayList<>();
         for (Map.Entry<String, String> entry : filters.entrySet()) {
             if (!"*".equals(entry.getValue())) {
-                expressions.add(String.format("%s == '%s'", entry.getKey(), entry.getValue()));
+                String escapedValue = entry.getValue().replace("'", "\\'");
+                expressions.add(String.format("%s == '%s'", entry.getKey(), escapedValue));
             }
         }
 

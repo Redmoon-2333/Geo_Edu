@@ -14,11 +14,14 @@ public interface KnowledgeImageMapper {
             "ORDER BY ki.display_order ASC")
     List<Image> findImagesByKnowledgeId(@Param("knowledgeId") String knowledgeId);
 
-    @Select("SELECT i.* FROM image i " +
+    @Select("<script>" +
+            "SELECT i.* FROM image i " +
             "INNER JOIN knowledge_image ki ON i.id = ki.image_id " +
-            "WHERE ki.knowledge_id IN (${knowledgeIds}) " +
-            "ORDER BY ki.knowledge_id, ki.display_order ASC")
-    List<Image> findImagesByKnowledgeIds(@Param("knowledgeIds") String knowledgeIds);
+            "WHERE ki.knowledge_id IN " +
+            "<foreach collection='knowledgeIds' item='id' open='(' separator=',' close=')'>#{id}</foreach>" +
+            "ORDER BY ki.knowledge_id, ki.display_order ASC" +
+            "</script>")
+    List<Image> findImagesByKnowledgeIds(@Param("knowledgeIds") List<String> knowledgeIds);
 
     @Insert("INSERT INTO knowledge_image (knowledge_id, image_id, display_order) " +
             "VALUES (#{knowledgeId}, #{imageId}, #{displayOrder})")
